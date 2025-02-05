@@ -3,241 +3,152 @@ package meilisearch
 import (
 	"context"
 	"net/http"
-	"strconv"
-	"time"
 )
 
-// IndexConfig configure the Index
-type IndexConfig struct {
-
-	// Uid is the unique identifier of a given index.
-	Uid string
-
-	// PrimaryKey is optional
-	PrimaryKey string
-
-	client *Client //nolint:golint,unused,structcheck
+// index is the type that represent an index in meilisearch
+type index struct {
+	uid        string
+	primaryKey string
+	client     *client
 }
 
-type IndexInterface interface {
-	FetchInfo() (resp *Index, err error)
-	FetchPrimaryKey() (resp *string, err error)
-	UpdateIndex(primaryKey string) (resp *Index, err error)
-	Delete(uid string) (ok bool, err error)
-	DeleteIfExists(uid string) (ok bool, err error)
-	GetStats() (resp *StatsIndex, err error)
-
-	AddDocuments(documentsPtr interface{}, primaryKey ...string) (resp *AsyncUpdateID, err error)
-	AddDocumentsInBatches(documentsPtr interface{}, batchSize int, primaryKey ...string) (resp []AsyncUpdateID, err error)
-	AddDocumentsCsv(documents []byte, primaryKey ...string) (resp *AsyncUpdateID, err error)
-	AddDocumentsCsvInBatches(documents []byte, batchSize int, primaryKey ...string) (resp []AsyncUpdateID, err error)
-	AddDocumentsNdjson(documents []byte, primaryKey ...string) (resp *AsyncUpdateID, err error)
-	AddDocumentsNdjsonInBatches(documents []byte, batchSize int, primaryKey ...string) (resp []AsyncUpdateID, err error)
-	UpdateDocuments(documentsPtr interface{}, primaryKey ...string) (resp *AsyncUpdateID, err error)
-	GetDocument(uid string, documentPtr interface{}) error
-	GetDocuments(request *DocumentsRequest, resp interface{}) error
-	DeleteDocument(uid string) (resp *AsyncUpdateID, err error)
-	DeleteDocuments(uid []string) (resp *AsyncUpdateID, err error)
-	DeleteAllDocuments() (resp *AsyncUpdateID, err error)
-	Search(query string, request *SearchRequest) (*SearchResponse, error)
-
-	GetUpdateStatus(updateID int64) (resp *Update, err error)
-	GetAllUpdateStatus() (resp *[]Update, err error)
-
-	GetSettings() (resp *Settings, err error)
-	UpdateSettings(request *Settings) (resp *AsyncUpdateID, err error)
-	ResetSettings() (resp *AsyncUpdateID, err error)
-	GetRankingRules() (resp *[]string, err error)
-	UpdateRankingRules(request *[]string) (resp *AsyncUpdateID, err error)
-	ResetRankingRules() (resp *AsyncUpdateID, err error)
-	GetDistinctAttribute() (resp *string, err error)
-	UpdateDistinctAttribute(request string) (resp *AsyncUpdateID, err error)
-	ResetDistinctAttribute() (resp *AsyncUpdateID, err error)
-	GetSearchableAttributes() (resp *[]string, err error)
-	UpdateSearchableAttributes(request *[]string) (resp *AsyncUpdateID, err error)
-	ResetSearchableAttributes() (resp *AsyncUpdateID, err error)
-	GetDisplayedAttributes() (resp *[]string, err error)
-	UpdateDisplayedAttributes(request *[]string) (resp *AsyncUpdateID, err error)
-	ResetDisplayedAttributes() (resp *AsyncUpdateID, err error)
-	GetStopWords() (resp *[]string, err error)
-	UpdateStopWords(request *[]string) (resp *AsyncUpdateID, err error)
-	ResetStopWords() (resp *AsyncUpdateID, err error)
-	GetSynonyms() (resp *map[string][]string, err error)
-	UpdateSynonyms(request *map[string][]string) (resp *AsyncUpdateID, err error)
-	ResetSynonyms() (resp *AsyncUpdateID, err error)
-	GetFilterableAttributes() (resp *[]string, err error)
-	UpdateFilterableAttributes(request *[]string) (resp *AsyncUpdateID, err error)
-	ResetFilterableAttributes() (resp *AsyncUpdateID, err error)
-
-	WaitForPendingUpdate(ctx context.Context, interval time.Duration, updateID *AsyncUpdateID) (UpdateStatus, error)
-	DefaultWaitForPendingUpdate(updateID *AsyncUpdateID) (UpdateStatus, error)
-}
-
-var _ IndexInterface = &Index{}
-
-func newIndex(client *Client, uid string) *Index {
-	return &Index{
-		UID:    uid,
-		client: client,
+func newIndex(cli *client, uid string) IndexManager {
+	return &index{
+		client: cli,
+		uid:    uid,
 	}
 }
 
-func (i Index) FetchInfo() (resp *Index, err error) {
-	resp = newIndex(i.client, i.UID)
-	req := internalRequest{
-		endpoint:            "/indexes/" + i.UID,
+func (i *index) GetTaskReader() TaskReader {
+	return i
+}
+
+func (i *index) GetDocumentManager() DocumentManager {
+	return i
+}
+
+func (i *index) GetDocumentReader() DocumentReader {
+	return i
+}
+
+func (i *index) GetSettingsManager() SettingsManager {
+	return i
+}
+
+func (i *index) GetSettingsReader() SettingsReader {
+	return i
+}
+
+func (i *index) GetSearch() SearchReader {
+	return i
+}
+
+func (i *index) GetIndexReader() IndexReader {
+	return i
+}
+
+func (i *index) FetchInfo() (*IndexResult, error) {
+	return i.FetchInfoWithContext(context.Background())
+}
+
+func (i *index) FetchInfoWithContext(ctx context.Context) (*IndexResult, error) {
+	resp := new(IndexResult)
+	req := &internalRequest{
+		endpoint:            "/indexes/" + i.uid,
 		method:              http.MethodGet,
 		withRequest:         nil,
 		withResponse:        resp,
 		acceptedStatusCodes: []int{http.StatusOK},
 		functionName:        "FetchInfo",
 	}
-	if err := i.client.executeRequest(req); err != nil {
+	if err := i.client.executeRequest(ctx, req); err != nil {
 		return nil, err
 	}
-	i.PrimaryKey = resp.PrimaryKey //nolint:golint,staticcheck
+	if resp.PrimaryKey != "" {
+		i.primaryKey = resp.PrimaryKey
+	}
+	resp.IndexManager = i
 	return resp, nil
 }
 
-func (i Index) FetchPrimaryKey() (resp *string, err error) {
-	index, err := i.FetchInfo()
+func (i *index) FetchPrimaryKey() (*string, error) {
+	return i.FetchPrimaryKeyWithContext(context.Background())
+}
+
+func (i *index) FetchPrimaryKeyWithContext(ctx context.Context) (*string, error) {
+	idx, err := i.FetchInfoWithContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &index.PrimaryKey, nil
+	i.primaryKey = idx.PrimaryKey
+	return &idx.PrimaryKey, nil
 }
 
-func (i Index) UpdateIndex(primaryKey string) (resp *Index, err error) {
+func (i *index) UpdateIndex(primaryKey string) (*TaskInfo, error) {
+	return i.UpdateIndexWithContext(context.Background(), primaryKey)
+}
+
+func (i *index) UpdateIndexWithContext(ctx context.Context, primaryKey string) (*TaskInfo, error) {
 	request := &UpdateIndexRequest{
 		PrimaryKey: primaryKey,
 	}
-	i.PrimaryKey = primaryKey
+	i.primaryKey = primaryKey
+	resp := new(TaskInfo)
 
-	req := internalRequest{
-		endpoint:            "/indexes/" + i.UID,
-		method:              http.MethodPut,
+	req := &internalRequest{
+		endpoint:            "/indexes/" + i.uid,
+		method:              http.MethodPatch,
 		contentType:         contentTypeJSON,
 		withRequest:         request,
-		withResponse:        &i,
-		acceptedStatusCodes: []int{http.StatusOK},
+		withResponse:        resp,
+		acceptedStatusCodes: []int{http.StatusAccepted},
 		functionName:        "UpdateIndex",
 	}
-	if err := i.client.executeRequest(req); err != nil {
+	if err := i.client.executeRequest(ctx, req); err != nil {
 		return nil, err
 	}
-	return &i, nil
+	i.primaryKey = primaryKey
+	return resp, nil
 }
 
-func (i Index) Delete(uid string) (ok bool, err error) {
-	req := internalRequest{
+func (i *index) Delete(uid string) (bool, error) {
+	return i.DeleteWithContext(context.Background(), uid)
+}
+
+func (i *index) DeleteWithContext(ctx context.Context, uid string) (bool, error) {
+	resp := new(TaskInfo)
+	req := &internalRequest{
 		endpoint:            "/indexes/" + uid,
 		method:              http.MethodDelete,
 		withRequest:         nil,
-		withResponse:        nil,
-		acceptedStatusCodes: []int{http.StatusNoContent},
+		withResponse:        resp,
+		acceptedStatusCodes: []int{http.StatusAccepted},
 		functionName:        "Delete",
 	}
 	// err is not nil if status code is not 204 StatusNoContent
-	if err := i.client.executeRequest(req); err != nil {
+	if err := i.client.executeRequest(ctx, req); err != nil {
 		return false, err
 	}
+	i.primaryKey = ""
 	return true, nil
 }
 
-func (i Index) DeleteIfExists(uid string) (ok bool, err error) {
-	req := internalRequest{
-		endpoint:            "/indexes/" + uid,
-		method:              http.MethodDelete,
-		withRequest:         nil,
-		withResponse:        nil,
-		acceptedStatusCodes: []int{http.StatusNoContent},
-		functionName:        "Delete",
-	}
-	// err is not nil if status code is not 204 StatusNoContent
-	if err := i.client.executeRequest(req); err != nil {
-		if err.(*Error).MeilisearchApiError.Code != "index_not_found" {
-			return false, err
-		}
-		return false, nil
-	}
-	return true, nil
+func (i *index) GetStats() (*StatsIndex, error) {
+	return i.GetStatsWithContext(context.Background())
 }
 
-func (i Index) GetStats() (resp *StatsIndex, err error) {
-	resp = &StatsIndex{}
-	req := internalRequest{
-		endpoint:            "/indexes/" + i.UID + "/stats",
+func (i *index) GetStatsWithContext(ctx context.Context) (*StatsIndex, error) {
+	resp := new(StatsIndex)
+	req := &internalRequest{
+		endpoint:            "/indexes/" + i.uid + "/stats",
 		method:              http.MethodGet,
 		withRequest:         nil,
 		withResponse:        resp,
 		acceptedStatusCodes: []int{http.StatusOK},
 		functionName:        "GetStats",
 	}
-	if err := i.client.executeRequest(req); err != nil {
+	if err := i.client.executeRequest(ctx, req); err != nil {
 		return nil, err
 	}
 	return resp, nil
-}
-
-func (i Index) GetUpdateStatus(updateID int64) (resp *Update, err error) {
-	resp = &Update{}
-	req := internalRequest{
-		endpoint:            "/indexes/" + i.UID + "/updates/" + strconv.FormatInt(updateID, 10),
-		method:              http.MethodGet,
-		withRequest:         nil,
-		withResponse:        resp,
-		acceptedStatusCodes: []int{http.StatusOK},
-		functionName:        "GetUpdateStatus",
-	}
-	if err := i.client.executeRequest(req); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-func (i Index) GetAllUpdateStatus() (resp *[]Update, err error) {
-	resp = &[]Update{}
-	req := internalRequest{
-		endpoint:            "/indexes/" + i.UID + "/updates",
-		method:              http.MethodGet,
-		withRequest:         nil,
-		withResponse:        &resp,
-		acceptedStatusCodes: []int{http.StatusOK},
-		functionName:        "GetAllUpdateStatus",
-	}
-	if err := i.client.executeRequest(req); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// DefaultWaitForPendingUpdate checks each 50ms the status of a WaitForPendingUpdate.
-// This is a default implementation of WaitForPendingUpdate.
-func (i Index) DefaultWaitForPendingUpdate(updateID *AsyncUpdateID) (UpdateStatus, error) {
-	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancelFunc()
-	return i.WaitForPendingUpdate(ctx, time.Millisecond*50, updateID)
-}
-
-// WaitForPendingUpdate waits for the end of an update.
-// The function will check by regular interval provided in parameter interval
-// the UpdateStatus. If it is not UpdateStatusEnqueued or the ctx cancelled
-// we return the UpdateStatus.
-func (i Index) WaitForPendingUpdate(
-	ctx context.Context,
-	interval time.Duration,
-	updateID *AsyncUpdateID) (UpdateStatus, error) {
-	for {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		update, err := i.GetUpdateStatus(updateID.UpdateID)
-		if err != nil {
-			return UpdateStatusUnknown, nil
-		}
-		if update.Status != UpdateStatusEnqueued && update.Status != UpdateStatusProcessing {
-			return update.Status, nil
-		}
-		time.Sleep(interval)
-	}
 }

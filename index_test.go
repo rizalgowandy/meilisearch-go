@@ -1,200 +1,111 @@
 package meilisearch
 
 import (
-	"context"
-	"testing"
-	"time"
-
+	"crypto/tls"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestIndex_Delete(t *testing.T) {
-	type args struct {
-		createUid []string
-		deleteUid []string
-	}
-	tests := []struct {
-		name          string
-		client        *Client
-		args          args
-		wantErr       bool
-		expectedError []Error
-	}{
-		{
-			name:   "TestIndexDeleteOneIndex",
-			client: defaultClient,
-			args: args{
-				createUid: []string{"1"},
-				deleteUid: []string{"1"},
-			},
-			wantErr: false,
-		},
-		{
-			name:   "TestIndexDeleteOneIndexWithCustomClient",
-			client: customClient,
-			args: args{
-				createUid: []string{"1"},
-				deleteUid: []string{"1"},
-			},
-			wantErr: false,
-		},
-		{
-			name:   "TestIndexDeleteMultipleIndex",
-			client: defaultClient,
-			args: args{
-				createUid: []string{"1", "2", "3", "4", "5"},
-				deleteUid: []string{"1", "2", "3", "4", "5"},
-			},
-			wantErr: false,
-		},
-		{
-			name:   "TestIndexDeleteNotExistingIndex",
-			client: defaultClient,
-			args: args{
-				createUid: []string{},
-				deleteUid: []string{"1"},
-			},
-			wantErr: true,
-			expectedError: []Error{
-				{
-					MeilisearchApiError: meilisearchApiError{
-						Code: "index_not_found",
-					},
-				},
-			},
-		},
-		{
-			name:   "TestIndexDeleteMultipleNotExistingIndex",
-			client: defaultClient,
-			args: args{
-				createUid: []string{},
-				deleteUid: []string{"1", "2", "3"},
-			},
-			wantErr: true,
-			expectedError: []Error{
-				{
-					MeilisearchApiError: meilisearchApiError{
-						Code: "index_not_found",
-					},
-				},
-				{
-					MeilisearchApiError: meilisearchApiError{
-						Code: "index_not_found",
-					},
-				},
-				{
-					MeilisearchApiError: meilisearchApiError{
-						Code: "index_not_found",
-					},
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := tt.client
-			for _, uid := range tt.args.createUid {
-				_, err := c.CreateIndex(&IndexConfig{Uid: uid})
-				require.NoError(t, err, "CreateIndex() in DeleteTest error should be nil")
-			}
-			for k := range tt.args.deleteUid {
-				i := c.Index(tt.args.deleteUid[k])
-				gotOk, err := i.Delete(tt.args.deleteUid[k])
-				if tt.wantErr {
-					require.Error(t, err)
-					require.Equal(t, tt.expectedError[k].MeilisearchApiError.Code,
-						err.(*Error).MeilisearchApiError.Code)
-				} else {
-					require.NoError(t, err)
-					require.True(t, gotOk)
-				}
-			}
-		})
-	}
-}
+	sv := setup(t, "")
+	customSv := setup(t, "", WithCustomClientWithTLS(&tls.Config{
+		InsecureSkipVerify: true,
+	}))
 
-func TestIndex_DeleteIfExists(t *testing.T) {
 	type args struct {
 		createUid []string
 		deleteUid []string
 	}
 	tests := []struct {
 		name   string
-		client *Client
+		client ServiceManager
 		args   args
-		wantOk bool
 	}{
 		{
-			name:   "TestIndexDeleteIfExistsOneIndex",
-			client: defaultClient,
+			name:   "TestIndexDeleteOneIndex",
+			client: sv,
 			args: args{
-				createUid: []string{"1"},
-				deleteUid: []string{"1"},
+				createUid: []string{"TestIndexDeleteOneIndex"},
+				deleteUid: []string{"TestIndexDeleteOneIndex"},
 			},
-			wantOk: true,
 		},
 		{
-			name:   "TestIndexDeleteIfExistsOneIndexWithCustomClient",
-			client: customClient,
+			name:   "TestIndexDeleteOneIndexWithCustomClient",
+			client: customSv,
 			args: args{
-				createUid: []string{"1"},
-				deleteUid: []string{"1"},
+				createUid: []string{"TestIndexDeleteOneIndexWithCustomClient"},
+				deleteUid: []string{"TestIndexDeleteOneIndexWithCustomClient"},
 			},
-			wantOk: true,
 		},
 		{
-			name:   "TestIndexDeleteIfExistsMultipleIndex",
-			client: defaultClient,
+			name:   "TestIndexDeleteMultipleIndex",
+			client: sv,
 			args: args{
-				createUid: []string{"1", "2", "3", "4", "5"},
-				deleteUid: []string{"1", "2", "3", "4", "5"},
+				createUid: []string{
+					"TestIndexDeleteMultipleIndex_1",
+					"TestIndexDeleteMultipleIndex_2",
+					"TestIndexDeleteMultipleIndex_3",
+					"TestIndexDeleteMultipleIndex_4",
+					"TestIndexDeleteMultipleIndex_5",
+				},
+				deleteUid: []string{
+					"TestIndexDeleteMultipleIndex_1",
+					"TestIndexDeleteMultipleIndex_2",
+					"TestIndexDeleteMultipleIndex_3",
+					"TestIndexDeleteMultipleIndex_4",
+					"TestIndexDeleteMultipleIndex_5",
+				},
 			},
-			wantOk: true,
 		},
 		{
-			name:   "TestIndexDeleteIfExistsNotExistingIndex",
-			client: defaultClient,
+			name:   "TestIndexDeleteNotExistingIndex",
+			client: sv,
 			args: args{
 				createUid: []string{},
-				deleteUid: []string{"1"},
+				deleteUid: []string{"TestIndexDeleteNotExistingIndex"},
 			},
-			wantOk: false,
 		},
 		{
 			name:   "TestIndexDeleteMultipleNotExistingIndex",
-			client: defaultClient,
+			client: sv,
 			args: args{
 				createUid: []string{},
-				deleteUid: []string{"1", "2", "3"},
+				deleteUid: []string{
+					"TestIndexDeleteMultipleNotExistingIndex_1",
+					"TestIndexDeleteMultipleNotExistingIndex_2",
+					"TestIndexDeleteMultipleNotExistingIndex_3",
+				},
 			},
-			wantOk: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := tt.client
+			t.Cleanup(cleanup(c))
+
 			for _, uid := range tt.args.createUid {
-				_, err := c.CreateIndex(&IndexConfig{Uid: uid})
+				_, err := setUpEmptyIndex(sv, &IndexConfig{Uid: uid})
 				require.NoError(t, err, "CreateIndex() in DeleteTest error should be nil")
 			}
 			for k := range tt.args.deleteUid {
 				i := c.Index(tt.args.deleteUid[k])
-				gotOk, err := i.DeleteIfExists(tt.args.deleteUid[k])
+				gotResp, err := i.Delete(tt.args.deleteUid[k])
+				require.True(t, gotResp)
 				require.NoError(t, err)
-				if tt.wantOk {
-					require.True(t, gotOk)
-				} else {
-					require.False(t, gotOk)
-				}
 			}
 		})
 	}
 }
 
 func TestIndex_GetStats(t *testing.T) {
+	sv := setup(t, "")
+	customSv := setup(t, "", WithCustomClientWithTLS(&tls.Config{
+		InsecureSkipVerify: true,
+	}))
+
 	type args struct {
 		UID    string
-		client *Client
+		client ServiceManager
 	}
 	tests := []struct {
 		name     string
@@ -204,8 +115,8 @@ func TestIndex_GetStats(t *testing.T) {
 		{
 			name: "TestIndexBasicGetStats",
 			args: args{
-				UID:    "indexUID",
-				client: defaultClient,
+				UID:    "TestIndexBasicGetStats",
+				client: sv,
 			},
 			wantResp: &StatsIndex{
 				NumberOfDocuments: 6,
@@ -216,8 +127,8 @@ func TestIndex_GetStats(t *testing.T) {
 		{
 			name: "TestIndexGetStatsWithCustomClient",
 			args: args{
-				UID:    "indexUID",
-				client: customClient,
+				UID:    "TestIndexGetStatsWithCustomClient",
+				client: customSv,
 			},
 			wantResp: &StatsIndex{
 				NumberOfDocuments: 6,
@@ -228,7 +139,7 @@ func TestIndex_GetStats(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SetUpBasicIndex()
+			setUpBasicIndex(sv, tt.args.UID)
 			c := tt.args.client
 			i := c.Index(tt.args.UID)
 			t.Cleanup(cleanup(c))
@@ -241,36 +152,35 @@ func TestIndex_GetStats(t *testing.T) {
 }
 
 func Test_newIndex(t *testing.T) {
+	sv := setup(t, "")
+	customSv := setup(t, "", WithCustomClientWithTLS(&tls.Config{
+		InsecureSkipVerify: true,
+	}))
+
 	type args struct {
-		client *Client
+		client ServiceManager
 		uid    string
 	}
 	tests := []struct {
 		name string
 		args args
-		want *Index
+		want IndexManager
 	}{
 		{
 			name: "TestBasicNewIndex",
 			args: args{
-				client: defaultClient,
+				client: sv,
 				uid:    "TestBasicNewIndex",
 			},
-			want: &Index{
-				UID:    "TestBasicNewIndex",
-				client: defaultClient,
-			},
+			want: sv.Index("TestBasicNewIndex"),
 		},
 		{
 			name: "TestNewIndexCustomClient",
 			args: args{
-				client: customClient,
-				uid:    "TestBasicNewIndex",
+				client: sv,
+				uid:    "TestNewIndexCustomClient",
 			},
-			want: &Index{
-				UID:    "TestBasicNewIndex",
-				client: customClient,
-			},
+			want: customSv.Index("TestNewIndexCustomClient"),
 		},
 	}
 	for _, tt := range tests {
@@ -278,359 +188,109 @@ func Test_newIndex(t *testing.T) {
 			c := tt.args.client
 			t.Cleanup(cleanup(c))
 
-			got := newIndex(c, tt.args.uid)
-			require.Equal(t, tt.want.UID, got.UID)
-			require.Equal(t, tt.want.client, got.client)
+			gotIdx := c.Index(tt.args.uid)
+
+			task, err := c.CreateIndex(&IndexConfig{Uid: tt.args.uid})
+			require.NoError(t, err)
+
+			testWaitForTask(t, gotIdx, task)
+
+			gotIdxResult, err := gotIdx.FetchInfo()
+			require.NoError(t, err)
+
+			wantIdxResult, err := tt.want.FetchInfo()
+			require.NoError(t, err)
+
+			require.Equal(t, gotIdxResult.UID, wantIdxResult.UID)
 			// Timestamps should be empty unless fetched
-			require.Zero(t, got.CreatedAt)
-			require.Zero(t, got.UpdatedAt)
-		})
-	}
-}
-
-func TestIndex_GetUpdateStatus(t *testing.T) {
-	type args struct {
-		UID      string
-		client   *Client
-		updateID int64
-		document []docTest
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "TestBasicGetUpdateStatus",
-			args: args{
-				UID:      "1",
-				client:   defaultClient,
-				updateID: 0,
-				document: []docTest{
-					{ID: "123", Name: "Pride and Prejudice"},
-				},
-			},
-		},
-		{
-			name: "TestGetUpdateStatusWithCustomClient",
-			args: args{
-				UID:      "1",
-				client:   customClient,
-				updateID: 0,
-				document: []docTest{
-					{ID: "123", Name: "Pride and Prejudice"},
-				},
-			},
-		},
-		{
-			name: "TestGetUpdateStatus",
-			args: args{
-				UID:      "1",
-				client:   defaultClient,
-				updateID: 1,
-				document: []docTest{
-					{ID: "456", Name: "Le Petit Prince"},
-					{ID: "1", Name: "Alice In Wonderland"},
-				},
-			},
-		},
-	}
-
-	t.Cleanup(cleanup(defaultClient))
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := tt.args.client
-			i := c.Index(tt.args.UID)
-
-			update, err := i.AddDocuments(tt.args.document)
-			require.NoError(t, err)
-
-			gotResp, err := i.GetUpdateStatus(update.UpdateID)
-			require.NoError(t, err)
-			require.NotNil(t, gotResp)
-			require.GreaterOrEqual(t, gotResp.UpdateID, tt.args.updateID)
-			require.NotNil(t, gotResp.UpdateID)
-		})
-	}
-}
-
-func TestIndex_GetAllUpdateStatus(t *testing.T) {
-	type args struct {
-		UID    string
-		client *Client
-	}
-	tests := []struct {
-		name     string
-		args     args
-		wantResp []Update
-	}{
-		{
-			name: "TestIndexBasicGetAllUpdateStatus",
-			args: args{
-				UID:    "indexUID",
-				client: defaultClient,
-			},
-			wantResp: []Update{
-				{
-					Status:   "processed",
-					UpdateID: 0,
-					Error:    "",
-				},
-			},
-		},
-		{
-			name: "TestIndexGetAllUpdateStatusWithCustomClient",
-			args: args{
-				UID:    "indexUID",
-				client: customClient,
-			},
-			wantResp: []Update{
-				{
-					Status:   "processed",
-					UpdateID: 0,
-					Error:    "",
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := tt.args.client
-			i := c.Index(tt.args.UID)
-
-			SetUpBasicIndex()
-
-			gotResp, err := i.GetAllUpdateStatus()
-			require.NoError(t, err)
-			require.Equal(t, tt.wantResp[0].Status, (*gotResp)[0].Status)
-			require.Equal(t, tt.wantResp[0].UpdateID, (*gotResp)[0].UpdateID)
-			require.Equal(t, tt.wantResp[0].Error, (*gotResp)[0].Error)
-		})
-	}
-}
-
-func TestIndex_DefaultWaitForPendingUpdate(t *testing.T) {
-	type args struct {
-		UID      string
-		client   *Client
-		updateID *AsyncUpdateID
-		document []docTest
-	}
-	tests := []struct {
-		name string
-		args args
-		want UpdateStatus
-	}{
-		{
-			name: "TestDefaultWaitForPendingUpdate",
-			args: args{
-				UID:    "1",
-				client: defaultClient,
-				updateID: &AsyncUpdateID{
-					UpdateID: 0,
-				},
-				document: []docTest{
-					{ID: "123", Name: "Pride and Prejudice"},
-				},
-			},
-			want: "processed",
-		},
-		{
-			name: "TestDefaultWaitForPendingUpdateWithCustomClient",
-			args: args{
-				UID:    "1",
-				client: customClient,
-				updateID: &AsyncUpdateID{
-					UpdateID: 0,
-				},
-				document: []docTest{
-					{ID: "123", Name: "Pride and Prejudice"},
-				},
-			},
-			want: "processed",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := tt.args.client
-			i := c.Index(tt.args.UID)
-			t.Cleanup(cleanup(c))
-
-			update, err := i.AddDocuments(tt.args.document)
-			require.NoError(t, err)
-
-			got, err := i.DefaultWaitForPendingUpdate(update)
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestIndex_WaitForPendingUpdate(t *testing.T) {
-	type args struct {
-		UID      string
-		client   *Client
-		interval time.Duration
-		timeout  time.Duration
-		updateID *AsyncUpdateID
-		document []docTest
-	}
-	tests := []struct {
-		name string
-		args args
-		want UpdateStatus
-	}{
-		{
-			name: "TestDefaultWaitForPendingUpdate50",
-			args: args{
-				UID:      "1",
-				client:   defaultClient,
-				interval: time.Millisecond * 50,
-				timeout:  time.Second * 5,
-				updateID: &AsyncUpdateID{
-					UpdateID: 0,
-				},
-				document: []docTest{
-					{ID: "123", Name: "Pride and Prejudice"},
-					{ID: "456", Name: "Le Petit Prince"},
-					{ID: "1", Name: "Alice In Wonderland"},
-				},
-			},
-			want: "processed",
-		},
-		{
-			name: "TestDefaultWaitForPendingUpdate50WithCustomClient",
-			args: args{
-				UID:      "1",
-				client:   customClient,
-				interval: time.Millisecond * 50,
-				timeout:  time.Second * 5,
-				updateID: &AsyncUpdateID{
-					UpdateID: 0,
-				},
-				document: []docTest{
-					{ID: "123", Name: "Pride and Prejudice"},
-					{ID: "456", Name: "Le Petit Prince"},
-					{ID: "1", Name: "Alice In Wonderland"},
-				},
-			},
-			want: "processed",
-		},
-		{
-			name: "TestDefaultWaitForPendingUpdate10",
-			args: args{
-				UID:      "1",
-				client:   defaultClient,
-				interval: time.Millisecond * 10,
-				timeout:  time.Second * 5,
-				updateID: &AsyncUpdateID{
-					UpdateID: 1,
-				},
-				document: []docTest{
-					{ID: "123", Name: "Pride and Prejudice"},
-					{ID: "456", Name: "Le Petit Prince"},
-					{ID: "1", Name: "Alice In Wonderland"},
-				},
-			},
-			want: "processed",
-		},
-		{
-			name: "TestDefaultWaitForPendingUpdateWithTimeout",
-			args: args{
-				UID:      "1",
-				client:   defaultClient,
-				interval: time.Millisecond * 50,
-				timeout:  time.Millisecond * 10,
-				updateID: &AsyncUpdateID{
-					UpdateID: 1,
-				},
-				document: []docTest{
-					{ID: "123", Name: "Pride and Prejudice"},
-					{ID: "456", Name: "Le Petit Prince"},
-					{ID: "1", Name: "Alice In Wonderland"},
-				},
-			},
-			want: "processed",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := tt.args.client
-			i := c.Index(tt.args.UID)
-			t.Cleanup(cleanup(c))
-
-			update, err := i.AddDocuments(tt.args.document)
-			require.NoError(t, err)
-
-			ctx, cancelFunc := context.WithTimeout(context.Background(), tt.args.timeout)
-			defer cancelFunc()
-
-			got, err := i.WaitForPendingUpdate(ctx, tt.args.interval, update)
-			if tt.args.timeout < tt.args.interval {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tt.want, got)
-			}
+			require.NotZero(t, gotIdxResult.CreatedAt)
+			require.NotZero(t, gotIdxResult.UpdatedAt)
 		})
 	}
 }
 
 func TestIndex_FetchInfo(t *testing.T) {
+	sv := setup(t, "")
+	customSv := setup(t, "", WithCustomClientWithTLS(&tls.Config{
+		InsecureSkipVerify: true,
+	}))
+	broken := setup(t, "", WithAPIKey("wrong"))
+
 	type args struct {
 		UID    string
-		client *Client
+		client ServiceManager
 	}
 	tests := []struct {
 		name     string
 		args     args
-		wantResp *Index
+		wantResp *IndexResult
 	}{
 		{
 			name: "TestIndexBasicFetchInfo",
 			args: args{
-				UID:    "indexUID",
-				client: defaultClient,
+				UID:    "TestIndexBasicFetchInfo",
+				client: sv,
 			},
-			wantResp: &Index{
-				UID:        "indexUID",
+			wantResp: &IndexResult{
+				UID:        "TestIndexBasicFetchInfo",
 				PrimaryKey: "book_id",
 			},
 		},
 		{
 			name: "TestIndexFetchInfoWithCustomClient",
 			args: args{
-				UID:    "indexUID",
-				client: customClient,
+				UID:    "TestIndexFetchInfoWithCustomClient",
+				client: customSv,
 			},
-			wantResp: &Index{
-				UID:        "indexUID",
+			wantResp: &IndexResult{
+				UID:        "TestIndexFetchInfoWithCustomClient",
 				PrimaryKey: "book_id",
 			},
+		},
+		{
+			name: "TestIndexFetchInfoWithBrokenClient",
+			args: args{
+				UID:    "TestIndexFetchInfoWithCustomClient",
+				client: broken,
+			},
+			wantResp: nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SetUpBasicIndex()
+			setUpBasicIndex(sv, tt.args.UID)
 			c := tt.args.client
-			i := c.Index(tt.args.UID)
 			t.Cleanup(cleanup(c))
 
+			i := c.Index(tt.args.UID)
+
 			gotResp, err := i.FetchInfo()
-			require.NoError(t, err)
-			require.Equal(t, tt.wantResp.UID, gotResp.UID)
-			require.Equal(t, tt.wantResp.PrimaryKey, gotResp.PrimaryKey)
-			// Make sure that timestamps are also fetched
-			require.NotZero(t, gotResp.CreatedAt)
-			require.NotZero(t, gotResp.UpdatedAt)
+
+			if tt.wantResp == nil {
+				require.Error(t, err)
+				require.Nil(t, gotResp)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.wantResp.UID, gotResp.UID)
+				require.Equal(t, tt.wantResp.PrimaryKey, gotResp.PrimaryKey)
+				// Make sure that timestamps are also fetched and are updated
+				require.NotZero(t, gotResp.CreatedAt)
+				require.NotZero(t, gotResp.UpdatedAt)
+			}
+
 		})
 	}
 }
 
 func TestIndex_FetchPrimaryKey(t *testing.T) {
+	sv := setup(t, "")
+	customSv := setup(t, "", WithCustomClientWithTLS(&tls.Config{
+		InsecureSkipVerify: true,
+	}))
+
 	type args struct {
 		UID    string
-		client *Client
+		client ServiceManager
 	}
 	tests := []struct {
 		name           string
@@ -640,23 +300,23 @@ func TestIndex_FetchPrimaryKey(t *testing.T) {
 		{
 			name: "TestIndexBasicFetchPrimaryKey",
 			args: args{
-				UID:    "indexUID",
-				client: defaultClient,
+				UID:    "TestIndexBasicFetchPrimaryKey",
+				client: sv,
 			},
 			wantPrimaryKey: "book_id",
 		},
 		{
 			name: "TestIndexFetchPrimaryKeyWithCustomClient",
 			args: args{
-				UID:    "indexUID",
-				client: customClient,
+				UID:    "TestIndexFetchPrimaryKeyWithCustomClient",
+				client: customSv,
 			},
 			wantPrimaryKey: "book_id",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SetUpBasicIndex()
+			setUpBasicIndex(tt.args.client, tt.args.UID)
 			c := tt.args.client
 			i := c.Index(tt.args.UID)
 			t.Cleanup(cleanup(c))
@@ -669,26 +329,31 @@ func TestIndex_FetchPrimaryKey(t *testing.T) {
 }
 
 func TestIndex_UpdateIndex(t *testing.T) {
+	sv := setup(t, "")
+	customSv := setup(t, "", WithCustomClientWithTLS(&tls.Config{
+		InsecureSkipVerify: true,
+	}))
+
 	type args struct {
 		primaryKey string
 		config     IndexConfig
-		client     *Client
+		client     ServiceManager
 	}
 	tests := []struct {
 		name     string
 		args     args
-		wantResp *Index
+		wantResp *IndexResult
 	}{
 		{
 			name: "TestIndexBasicUpdateIndex",
 			args: args{
-				client: defaultClient,
+				client: sv,
 				config: IndexConfig{
 					Uid: "indexUID",
 				},
 				primaryKey: "book_id",
 			},
-			wantResp: &Index{
+			wantResp: &IndexResult{
 				UID:        "indexUID",
 				PrimaryKey: "book_id",
 			},
@@ -696,13 +361,13 @@ func TestIndex_UpdateIndex(t *testing.T) {
 		{
 			name: "TestIndexUpdateIndexWithCustomClient",
 			args: args{
-				client: customClient,
+				client: customSv,
 				config: IndexConfig{
 					Uid: "indexUID",
 				},
 				primaryKey: "book_id",
 			},
-			wantResp: &Index{
+			wantResp: &IndexResult{
 				UID:        "indexUID",
 				PrimaryKey: "book_id",
 			},
@@ -712,22 +377,42 @@ func TestIndex_UpdateIndex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := tt.args.client
 			t.Cleanup(cleanup(c))
-			i, err := c.CreateIndex(&tt.args.config)
+
+			i, err := setUpEmptyIndex(tt.args.client, &tt.args.config)
 			require.NoError(t, err)
 			require.Equal(t, tt.args.config.Uid, i.UID)
-			require.Equal(t, tt.args.config.PrimaryKey, i.PrimaryKey)
 			// Store original timestamps
 			createdAt := i.CreatedAt
 			updatedAt := i.UpdatedAt
 
 			gotResp, err := i.UpdateIndex(tt.args.primaryKey)
+			require.NoError(t, err)
+
+			_, err = c.WaitForTask(gotResp.TaskUID, 0)
+			require.NoError(t, err)
 
 			require.NoError(t, err)
-			require.Equal(t, tt.wantResp.UID, gotResp.UID)
-			require.Equal(t, tt.wantResp.PrimaryKey, gotResp.PrimaryKey)
+			require.Equal(t, tt.wantResp.UID, gotResp.IndexUID)
+
+			gotIndex, err := c.GetIndex(tt.args.config.Uid)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantResp.PrimaryKey, gotIndex.PrimaryKey)
 			// Make sure that timestamps were correctly updated as well
-			require.Equal(t, createdAt, gotResp.CreatedAt)
-			require.NotEqual(t, updatedAt, gotResp.UpdatedAt)
+			require.Equal(t, createdAt, gotIndex.CreatedAt)
+			require.NotEqual(t, updatedAt, gotIndex.UpdatedAt)
 		})
 	}
+}
+
+func TestIndexManagerAndReaders(t *testing.T) {
+	c := setup(t, "")
+	idx := c.Index("indexUID")
+	require.NotNil(t, idx)
+	require.NotNil(t, idx.GetIndexReader())
+	require.NotNil(t, idx.GetTaskReader())
+	require.NotNil(t, idx.GetSettingsManager())
+	require.NotNil(t, idx.GetSettingsReader())
+	require.NotNil(t, idx.GetSearch())
+	require.NotNil(t, idx.GetDocumentManager())
+	require.NotNil(t, idx.GetDocumentReader())
 }
